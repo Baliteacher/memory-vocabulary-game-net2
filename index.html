@@ -148,25 +148,6 @@
 
   .hidden{ display:none !important; }
 
-  .lista-btn{
-    display:block; width:100%;
-    text-align:left;
-    font-family:'Baloo 2', sans-serif; font-weight:700; font-size:15px;
-    border: 2px solid var(--line);
-    background: var(--bg-card);
-    border-radius: 12px;
-    padding: 14px 16px;
-    margin-bottom: 10px;
-    cursor: pointer;
-    color: var(--ink);
-    transition: border-color .15s, transform .1s;
-  }
-  .lista-btn:hover{ border-color: var(--purple); transform: translateY(-1px); }
-  .lista-btn span{
-    display:block; font-family:'Nunito', sans-serif; font-weight:400; font-size:12px;
-    color: var(--ink-soft); margin-top:2px;
-  }
-
   footer{ text-align:center; font-size:12px; color:var(--ink-soft); margin-top: 24px; }
 
   @media (max-width:420px){
@@ -183,10 +164,14 @@
     <p>Supera los tres niveles para completar el reto — @baliteacher</p>
   </header>
 
-  <!-- PANTALLA 1: elegir qué lista/Memory jugar -->
-  <div class="panel" id="seleccionPanel">
-    <label>Elige qué Memory quieres jugar</label>
-    <div id="listasContainer" class="hint">Cargando listas disponibles...</div>
+  <!-- PANTALLA 1: pegar lista (para ti, la profe) -->
+  <div class="panel" id="setupPanel">
+    <label>Pega tu lista de vocabulario</label>
+    <textarea id="wordListInput" placeholder="apple, manzana&#10;enthusiasm, entusiasmo&#10;run, correr"></textarea>
+    <div class="hint">Una palabra por línea: inglés, traducción. Se reparte sola en 3 niveles de dificultad.</div>
+    <div class="btn-row">
+      <button class="btn" id="generarBtn">Generar juego</button>
+    </div>
   </div>
 
   <!-- PANTALLA 2: email del alumno -->
@@ -200,7 +185,6 @@
 
   <!-- PANTALLA 3: juego -->
   <div class="hidden" id="gamePanel">
-    <p style="text-align:center; font-family:'Baloo 2',sans-serif; font-weight:700; color:var(--ink-soft); margin:0 0 6px;" id="tituloJuego"></p>
     <div class="levels">
       <div class="level-tab unlocked current" data-level="verde">🟢 Verde</div>
       <div class="level-tab locked" data-level="azul">🔵 Azul</div>
@@ -242,7 +226,7 @@
    PEGA AQUÍ LA URL DE TU APLICACIÓN WEB DE APPS SCRIPT
    (la que obtienes al desplegar receptor_resultados.gs)
    ========================================================= */
-  const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz2pXGlvjF-xkcYmU-v6rgIGNEoVhyu-jr28XG-KbvetlxCJ9SJM2Kov_nYz3dfSemg1A/exec";
+  const APPS_SCRIPT_URL = "PEGA_AQUI_LA_URL_DE_TU_APP_WEB";
 /* ========================================================= */
 
   const MAX_FALLOS_PARA_PASAR = 2;
@@ -250,7 +234,6 @@
   const NOMBRE_NIVEL = { verde: '🟢 Verde', azul: '🔵 Azul', morado: '🟣 Morado' };
 
   let email = '';
-  let tituloSeleccionado = '';
   let listaPorNivel = { verde: [], azul: [], morado: [] };
   let nivelActualIndex = 0;
   let nivelesDesbloqueados = { verde: true, azul: false, morado: false };
@@ -274,37 +257,15 @@
     return a;
   }
 
-  async function cargarListas(){
-    const contenedor = document.getElementById('listasContainer');
-    if(!APPS_SCRIPT_URL || APPS_SCRIPT_URL.startsWith('PEGA_AQUI')){
-      contenedor.innerHTML = '⚙️ Falta configurar APPS_SCRIPT_URL al principio del &lt;script&gt;.';
-      return;
-    }
-    try{
-      const listas = await fetch(APPS_SCRIPT_URL).then(r => r.json());
-      if(!listas.length){
-        contenedor.innerHTML = 'Aún no hay ninguna lista de vocabulario en la Sheet.';
-        return;
-      }
-      contenedor.innerHTML = '';
-      listas.forEach(lista => {
-        const btn = document.createElement('button');
-        btn.className = 'lista-btn';
-        btn.innerHTML = lista.titulo + '<span>' + lista.pares.length + ' palabras</span>';
-        btn.onclick = () => seleccionarLista(lista);
-        contenedor.appendChild(btn);
-      });
-    } catch(err){
-      console.error(err);
-      contenedor.innerHTML = '😕 No se pudieron cargar las listas. Revisa la URL de Apps Script.';
-    }
-  }
-
-  function seleccionarLista(lista){
-    tituloSeleccionado = lista.titulo;
-    listaPorNivel = repartirNiveles(lista.pares);
-    document.getElementById('seleccionPanel').classList.add('hidden');
-    document.getElementById('emailPanel').classList.remove('hidden');
+  function parsearLista(texto){
+    return texto.split('\n')
+      .map(l => l.trim())
+      .filter(Boolean)
+      .map(l => {
+        const partes = l.split(',');
+        return { en: (partes[0]||'').trim(), es: (partes[1]||'').trim() };
+      })
+      .filter(p => p.en && p.es);
   }
 
   function repartirNiveles(pares){
@@ -321,6 +282,17 @@
     return { verde, azul, morado };
   }
 
+  document.getElementById('generarBtn').onclick = () => {
+    const pares = parsearLista(document.getElementById('wordListInput').value);
+    if(pares.length < 3){
+      alert('Necesitas al menos 3 palabras con su traducción.');
+      return;
+    }
+    listaPorNivel = repartirNiveles(pares);
+    document.getElementById('setupPanel').classList.add('hidden');
+    document.getElementById('emailPanel').classList.remove('hidden');
+  };
+
   document.getElementById('empezarBtn').onclick = () => {
     const val = document.getElementById('emailInput').value.trim();
     if(!val || !val.includes('@')){
@@ -335,7 +307,6 @@
 
   function iniciarNivel(nivel){
     nivelActualIndex = ORDEN_NIVELES.indexOf(nivel);
-    document.getElementById('tituloJuego').textContent = tituloSeleccionado;
     actualizarTabs();
 
     const pares = listaPorNivel[nivel];
@@ -435,7 +406,7 @@
     const nivel = ORDEN_NIVELES[nivelActualIndex];
     const superado = fallos <= MAX_FALLOS_PARA_PASAR;
 
-    enviarResultado({ email, lista: tituloSeleccionado, nivel, aciertos: totalParejas, fallos, tiempo: tiempoTotal, superado });
+    enviarResultado({ email, nivel, aciertos: totalParejas, fallos, tiempo: tiempoTotal, superado });
 
     document.getElementById('gamePanel').classList.add('hidden');
     const panel = document.getElementById('resultPanel');
@@ -500,8 +471,6 @@
       }
     };
   });
-
-  cargarListas();
 </script>
 </body>
 </html>
